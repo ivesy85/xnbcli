@@ -9,6 +9,7 @@ I wanted to modify XNB files for use on the **Nintendo Switch** via **LayeredFS*
 - Supports **unpacking** and **repacking LZX-compressed** XNB files.
 - Works with **modding Stardew Valley**.
 - Requires `xcompress32.dll` (not included, but can be found with a quick search).
+- Requires a **windows environment** to correctly use the dll for compression.
 
 ## Installation & Requirements
 ### 1️⃣ Install Dependencies
