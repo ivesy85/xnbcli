@@ -1,39 +1,49 @@
 # xnbcli
+This repository is a fork of [LeonBlade/xnbcli](https://github.com/LeonBlade/xnbcli), with additional refactored logic to support LZX compression from [draivin/XNBNode](https://github.com/draivin/XNBNode), along with my own custom code to improve handling of repacked XNB files.
 
-[![Build Status](https://travis-ci.org/LeonBlade/xnbcli.svg?branch=master)](https://travis-ci.org/LeonBlade/xnbcli)
+## Why I Built This
+I wanted to modify XNB files for use on the **Nintendo Switch** via **LayeredFS**. This tool has worked really well for me, and I now have custom **Stardew Valley** mods running on the Switch! 🎮
 
-A CLI tool for XNB packing/unpacking purpose built for Stardew Valley.
+## About
+`xnbcli` is a **CLI tool for packing and unpacking XNB files**, purpose-built for **Stardew Valley**.
+- Supports **unpacking** and **repacking LZX-compressed** XNB files.
+- Works with **modding Stardew Valley**.
+- Requires `xcompress32.dll` (not included, but can be found with a quick search).
 
-This tool currently supports unpacking all LZX compressed XNB files for Stardew Valley.  
-There is some basic groundwork for XACT as well.
-
-The end goal for this project is to serve as a CLI for a GUI wrapper to leverage so the average user can interface with
-XNB files a lot easier.
+## Installation & Requirements
+### 1️⃣ Install Dependencies
+You need a **32**-bit version of **Node.js (v16)** for compatibility. The easiest way is using nvm in PowerShell:
+```sh
+nvm install 16.20.0 32
+nvm use 16.20.0 32
+```
+Ensure you have the following installed:
+- **Node.js** (32-bit, version 16)
+- **npm**
+- **Python**
+- `windows-build-tools`
+    ```sh
+    npm install -g --production windows-build-tools
+    ```
+- Run `npm install` to install all required packages.
+## 2️⃣ Required DLL File
+`xnbcli` requires `xcompress32.dll` in the working directory. This file is **proprietary** and **not included** in the repository, but a quick search should help you find it.
 
 ## Usage
-
-**Unpacking XNB files**
-
-Place any files you wish to extract in the `packed` folder and run the appropriate file for unpacking.  `unpack.bat`, `unpack.command` or `unpack.sh`.
-
-**Packing XNB files**
-
-Place any files you wish to repack back into XNB files in the `unpacked` folder and run the appropriate file for packing.  `pack.bat`, `pack.command` or `pack.sh`.
-
-**Terminal Use**
-
-`xnbcli (pack|unpack) [input] [output]`
-
-## Developers
-
-If you wish to run this with Node.js and all the source code, please refer to the following.
-
-- `node.js` installed
-- `npm` installed
-- `python` installed
-- (for Windows users) `windows-build-tools` installed (`npm i --g --production windows-build-tools`)
-- Run `npm install` to install node packages.
-- `npm run unpack` and `npm run pack` scripts are available for use in the `package.json` file.
+### 📂 Unpacking XNB Files
+1. Place your .xnb files into the packed folder.
+2. Run:
+    ```sh
+    npm run unpack
+    ```
+3. Extracted files will be in the unpacked folder.
+### 📦 Packing XNB Files
+1. Modify the extracted files inside the unpacked folder.
+2. Run:
+    ```sh
+    npm run pack
+    ```
+3. Your repacked .xnb files will be available in the packed folder.
 
 ## License
-GNU LGPL v3.0
+This project is licensed under the **GNU LGPL v3.0**.

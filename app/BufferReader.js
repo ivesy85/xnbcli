@@ -204,7 +204,10 @@ class BufferReader {
      * @returns {Number}
      */
     readUInt() {
-        return this.read(1).readUInt8();
+        const data = this.read(1);
+        //console.log(data);
+        //console.log(data.readUInt8());
+        return data.readUInt8();
     }
 
     /**
@@ -293,7 +296,10 @@ class BufferReader {
             this.seek(1);
             return chars.join('');
         }
-        return this.read(count).toString();
+        const data = this.read(count);
+        //console.log(data);
+        //console.log(data.toString());
+        return data.toString();
     }
 
     /**

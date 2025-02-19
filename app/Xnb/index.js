@@ -4,6 +4,8 @@ const Log = require('../Log');
 const XnbError = require('../XnbError');
 
 const { simplifyType, getReader } = require('./TypeReader');
+const XCompress = require('./XCompress');
+const xcompress = new XCompress();
 const { StringReader } = require('./Readers');
 const ReaderResolver = require('./ReaderResolver');
 const Presser = require('../Presser');
@@ -32,6 +34,8 @@ class Xnb {
         this.target = '';
         // format version
         this.formatVersion = 0;
+        // flags UInt8
+        this.flags = 0;
         // HiDef flag
         this.hidef = false;
         // Compressed flag
@@ -91,9 +95,11 @@ class Xnb {
             // decompress LZX format
             if (this.compressionType == COMPRESSED_LZX_MASK) {
                 // get the amount of data to compress
-                const compressedTodo = this.fileSize - XNB_COMPRESSED_PROLOGUE_SIZE;
-                // decompress the buffer based on the file size
-                const decompressed = Presser.decompress(this.buffer, compressedTodo, decompressedSize);
+                const compressedBuffer = this.buffer.slice(XNB_COMPRESSED_PROLOGUE_SIZE);
+
+                const decompressed = Buffer.alloc(decompressedSize);
+                xcompress.decompress(compressedBuffer, decompressed);
+
                 // copy the decompressed buffer into the file buffer
                 this.buffer.copyFrom(decompressed, XNB_COMPRESSED_PROLOGUE_SIZE, 0, decompressedSize);
                 // reset the byte seek head to read content
@@ -169,8 +175,10 @@ class Xnb {
             header: {
                 target: this.target,
                 formatVersion: this.formatVersion,
+                flagsUInt8: this.flags,
                 hidef: this.hidef,
-                compressed: this.compressed
+                compressed: this.compressed,
+                compressionType: this.compressionType
             },
             readers,
             content: result
@@ -193,22 +201,22 @@ class Xnb {
             // set the header information
             this.target = json.header.target;
             this.formatVersion = json.header.formatVersion;
+            this.flags = json.header.flagsUInt8;
             this.hidef = json.header.hidef;
-            const lz4Compression = (this.target == 'a' || this.target == 'i');
-            this.compressed = lz4Compression ? true : false; // support android LZ4 compression
+            this.compressed = json.header.compressed;
+            this.compressionType = json.header.compressionType;
 
             // write the header into the buffer
             buffer.write("XNB");
             buffer.write(this.target);
             buffer.writeByte(this.formatVersion);
-            // write the LZ4 mask for android compression only
-            buffer.writeByte(this.hidef | ((this.compressed && lz4Compression) ? COMPRESSED_LZ4_MASK : 0));
+            buffer.writeByte(this.flags);
 
             // write temporary filesize
             buffer.writeUInt32(0);
 
-            // write the decompression size temporarily if android
-            if (lz4Compression)
+            // write the decompression size temporarily
+            if (this.compressed)
                 buffer.writeUInt32(0);
 
             // write the amount of readers
@@ -234,38 +242,67 @@ class Xnb {
             // NOTE: this buffer allocates default with 500 bytes
             buffer.trim();
 
-            // LZ4 compression
-            if (lz4Compression) {
-                // create buffer with just the content
-                const contentBuffer = Buffer.alloc(buffer.bytePosition - XNB_COMPRESSED_PROLOGUE_SIZE);
-                // copy the content from the main buffer into the content buffer
-                buffer.buffer.copy(contentBuffer, 0, XNB_COMPRESSED_PROLOGUE_SIZE);
+            // handle compression
+            if (this.compressed) {
+                // compress LZX format
+                if (this.compressionType == COMPRESSED_LZX_MASK) {
+                    // Create buffer with just the content
+                    const contentBuffer = Buffer.alloc(buffer.bytePosition - XNB_COMPRESSED_PROLOGUE_SIZE);
+                    buffer.buffer.copy(contentBuffer, 0, XNB_COMPRESSED_PROLOGUE_SIZE);
 
-                // create a buffer for the compressed data
-                let compressed = Buffer.alloc(LZ4.encodeBound(contentBuffer.length));
+                    // Compress using the XCompress class
+                    let compressed = XCompress.compress(contentBuffer);
 
-                // compress the data into the buffer
-                const compressedSize = LZ4.encodeBlock(contentBuffer, compressed);
+                    // Write the decompressed size into the buffer (original size)
+                    buffer.buffer.writeUInt32LE(contentBuffer.length, 10);
+                    // Write the total file size into the buffer (header + compressed data)
+                    buffer.buffer.writeUInt32LE(XNB_COMPRESSED_PROLOGUE_SIZE + compressed.length, 6);
 
-                // slice off anything extra
-                compressed = compressed.slice(0, compressedSize);
+                    // Create a new return buffer
+                    let returnBuffer = Buffer.from(buffer.buffer);
 
-                // write the decompressed size into the buffer
-                buffer.buffer.writeUInt32LE(contentBuffer.length, 10);
-                // write the file size into the buffer
-                buffer.buffer.writeUInt32LE(XNB_COMPRESSED_PROLOGUE_SIZE + compressedSize, 6);
+                    // Splice in the compressed content
+                    compressed.copy(returnBuffer, XNB_COMPRESSED_PROLOGUE_SIZE, 0);
 
-                // create a new return buffer
-                let returnBuffer = Buffer.from(buffer.buffer);
+                    // Slice off any excess
+                    returnBuffer = returnBuffer.slice(0, XNB_COMPRESSED_PROLOGUE_SIZE + compressed.length);
 
-                // splice in the content into the return buffer
-                compressed.copy(returnBuffer, XNB_COMPRESSED_PROLOGUE_SIZE, 0);
+                    // return the buffer
+                    return returnBuffer;
+                }
+                // compress LZ4 format
+                else if (this.compressionType == COMPRESSED_LZ4_MASK) {
+                    // create buffer with just the content
+                    const contentBuffer = Buffer.alloc(buffer.bytePosition - XNB_COMPRESSED_PROLOGUE_SIZE);
+                    // copy the content from the main buffer into the content buffer
+                    buffer.buffer.copy(contentBuffer, 0, XNB_COMPRESSED_PROLOGUE_SIZE);
 
-                // slice off the excess
-                returnBuffer = returnBuffer.slice(0, XNB_COMPRESSED_PROLOGUE_SIZE + compressedSize);
+                    // create a buffer for the compressed data
+                    let compressed = Buffer.alloc(LZ4.encodeBound(contentBuffer.length));
 
-                // return the buffer
-                return returnBuffer;
+                    // compress the data into the buffer
+                    const compressedSize = LZ4.encodeBlock(contentBuffer, compressed);
+
+                    // slice off anything extra
+                    compressed = compressed.slice(0, compressedSize);
+
+                    // write the decompressed size into the buffer
+                    buffer.buffer.writeUInt32LE(contentBuffer.length, 10);
+                    // write the file size into the buffer
+                    buffer.buffer.writeUInt32LE(XNB_COMPRESSED_PROLOGUE_SIZE + compressedSize, 6);
+
+                    // create a new return buffer
+                    let returnBuffer = Buffer.from(buffer.buffer);
+
+                    // splice in the content into the return buffer
+                    compressed.copy(returnBuffer, XNB_COMPRESSED_PROLOGUE_SIZE, 0);
+
+                    // slice off the excess
+                    returnBuffer = returnBuffer.slice(0, XNB_COMPRESSED_PROLOGUE_SIZE + compressedSize);
+
+                    // return the buffer
+                    return returnBuffer;
+                }
             }
 
             // write the file size into the buffer
@@ -300,10 +337,10 @@ class Xnb {
         Log.debug('Valid XNB magic found!');
 
         // load the target platform
-        this.target = this.buffer.readString(1).toLowerCase();
+        this.target = this.buffer.readString(1);
 
         // read the target platform
-        switch (this.target) {
+        switch (this.target.toLowerCase()) {
             case 'w':
                 Log.debug('Target platform: Microsoft Windows');
                 break;
@@ -318,6 +355,9 @@ class Xnb {
                 break;
             case 'i':
                 Log.debug('Target platform: iOS');
+                break;
+            case 's':
+                Log.debug('Target platform: iNintendo Switch');
                 break;
             default:
                 Log.warn(`Invalid target platform "${this.target}" found.`);
@@ -344,14 +384,14 @@ class Xnb {
         }
 
         // read the flag bits
-        const flags = this.buffer.readByte(1);
+        this.flags = this.buffer.readByte(1);
         // get the HiDef flag
-        this.hidef = (flags & HIDEF_MASK) != 0;
+        this.hidef = (this.flags & HIDEF_MASK) != 0;
         // get the compressed flag
-        this.compressed = (flags & COMPRESSED_LZX_MASK) || (flags & COMPRESSED_LZ4_MASK) != 0;
+        this.compressed = (this.flags & COMPRESSED_LZX_MASK) || (this.flags & COMPRESSED_LZ4_MASK) != 0;
         // set the compression type
         // NOTE: probably a better way to do both lines but sticking with this for now
-        this.compressionType = (flags & COMPRESSED_LZX_MASK) != 0 ? COMPRESSED_LZX_MASK : ((flags & COMPRESSED_LZ4_MASK) ? COMPRESSED_LZ4_MASK : 0);
+        this.compressionType = (this.flags & COMPRESSED_LZX_MASK) != 0 ? COMPRESSED_LZX_MASK : ((this.flags & COMPRESSED_LZ4_MASK) ? COMPRESSED_LZ4_MASK : 0);
         // debug content information
         Log.debug(`Content: ${(this.hidef ? 'HiDef' : 'Reach')}`);
         // log compressed state

@@ -17,10 +17,13 @@
     "commander": "^7.0.0",
     "compare-versions": "^3.6.0",
     "dxt-js": "0.0.3",
+    "ffi-napi": "^4.0.3",
     "got": "^9.6.0",
     "lz4": "^0.6.5",
     "mkdirp": "^1.0.4",
     "pngjs": "^6.0.0",
+    "ref-napi": "^3.0.3",
+    "ref-struct-napi": "^1.1.1",
     "walk": "^2.3.14"
   }
 }
